@@ -31,7 +31,7 @@ export default function SearchBar({ onSelect }: Props) {
         setOpen(true)
         if (res.length === 0) setError('見つかりませんでした。別のキーワードで試してください。')
       } catch {
-        setError('検索中にエラーが発生しました。')
+        setError('サーバーに接続できませんでした。少し待ってから再試行してください。')
         setOpen(true)
       } finally {
         setLoading(false)

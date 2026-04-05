@@ -1,30 +1,49 @@
 import type { GolfCourse, GolfHole } from './types'
 import { calculateBearing } from './utils'
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+// 複数のOverpassインスタンスを順番に試す（冗長化）
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+  'https://z.overpass-api.de/api/interpreter',
+]
 
-function overpassQuery(query: string): string {
-  return `${OVERPASS_URL}?data=${encodeURIComponent(query)}`
+const HOLE_ENDPOINT = 'https://overpass-api.de/api/interpreter'
+
+async function fetchOverpass(queryBody: string): Promise<unknown> {
+  let lastError: unknown
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(`${endpoint}?data=${encodeURIComponent(queryBody)}`, {
+        signal: AbortSignal.timeout(20000),
+      })
+      if (!res.ok) continue
+      const text = await res.text()
+      if (!text.startsWith('{')) continue // HTMLエラーページを除外
+      return JSON.parse(text)
+    } catch (e) {
+      lastError = e
+    }
+  }
+  throw lastError ?? new Error('Overpass APIに接続できません')
 }
 
-// ゴルフ場名で検索（Overpassのみ：leisure=golf_course タグで確実にゴルフ場のみ）
+// ゴルフ場名で検索（leisure=golf_course タグのみ返す）
 export async function searchGolfCourses(name: string): Promise<GolfCourse[]> {
   if (!name.trim()) return []
 
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const query = `
-[out:json][timeout:25];
+[out:json][timeout:20];
 (
   way["leisure"="golf_course"]["name"~"${escaped}",i];
   relation["leisure"="golf_course"]["name"~"${escaped}",i];
 );
 out center tags;`
 
-  const res = await fetch(overpassQuery(query))
-  if (!res.ok) throw new Error('検索に失敗しました。しばらくしてから再試行してください。')
-  const data = await res.json()
+  const data = await fetchOverpass(query) as { elements: OverpassSearchElement[] }
 
-  return (data.elements as OverpassSearchElement[])
+  return data.elements
     .filter((el) => el.tags?.name)
     .map((el) => {
       const lat = el.center?.lat ?? el.lat ?? 0
@@ -38,7 +57,7 @@ out center tags;`
         type: el.type as 'way' | 'relation',
         name: el.tags!.name,
         lat, lon, bounds,
-        address: [el.tags?.['addr:prefecture'], el.tags?.['addr:city']]
+        address: [el.tags?.["addr:prefecture"], el.tags?.["addr:city"]]
           .filter(Boolean).join(' '),
       }
     })
@@ -68,7 +87,7 @@ export async function fetchGolfHoles(course: GolfCourse): Promise<GolfHole[]> {
 );
 out body;`
 
-  const res = await fetch(overpassQuery(query))
+  const res = await fetch(`${HOLE_ENDPOINT}?data=${encodeURIComponent(query)}`)
   if (!res.ok) throw new Error('ホールデータの取得に失敗しました')
   const data = await res.json()
 
