@@ -70,7 +70,7 @@ out center tags;`
     })
 }
 
-// Nominatim: フルテキスト検索の補完
+// Nominatim: type===golf_course のみ厳格フィルター
 async function searchByNominatim(name: string): Promise<GolfCourse[]> {
   const url =
     `${NOMINATIM_URL}/search` +
@@ -84,13 +84,8 @@ async function searchByNominatim(name: string): Promise<GolfCourse[]> {
   if (!res.ok) return []
   const data: NominatimResult[] = await res.json()
 
-  const GOLF_WORDS = ['ゴルフ', 'golf', 'カントリー', 'country club']
   return data
-    .filter(
-      (r) =>
-        r.type === 'golf_course' ||
-        GOLF_WORDS.some((w) => r.display_name.toLowerCase().includes(w.toLowerCase())),
-    )
+    .filter((r) => r.type === 'golf_course')
     .map((r) => {
       const lat = parseFloat(r.lat)
       const lon = parseFloat(r.lon)
