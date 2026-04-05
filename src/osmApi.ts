@@ -2,44 +2,18 @@ import type { GolfCourse, GolfHole } from './types'
 import { calculateBearing } from './utils'
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
-const NOMINATIM_URL = 'https://nominatim.openstreetmap.org'
 
 function overpassQuery(query: string): string {
   return `${OVERPASS_URL}?data=${encodeURIComponent(query)}`
 }
 
-// ゴルフ場名で検索（Overpass + Nominatim 並行、マージして返す）
+// ゴルフ場名で検索（Overpassのみ：leisure=golf_course タグで確実にゴルフ場のみ）
 export async function searchGolfCourses(name: string): Promise<GolfCourse[]> {
   if (!name.trim()) return []
 
-  const [overpassResults, nominatimResults] = await Promise.allSettled([
-    searchByOverpass(name),
-    searchByNominatim(name),
-  ])
-
-  const combined: GolfCourse[] = []
-  const seen = new Set<string>()
-
-  // Overpass優先（部分一致に強い）
-  for (const r of overpassResults.status === 'fulfilled' ? overpassResults.value : []) {
-    const key = `${r.lat.toFixed(3)},${r.lon.toFixed(3)}`
-    if (!seen.has(key)) { seen.add(key); combined.push(r) }
-  }
-  // Nominatimで補完
-  for (const r of nominatimResults.status === 'fulfilled' ? nominatimResults.value : []) {
-    const key = `${r.lat.toFixed(3)},${r.lon.toFixed(3)}`
-    if (!seen.has(key)) { seen.add(key); combined.push(r) }
-  }
-
-  if (combined.length === 0) throw new Error('見つかりませんでした')
-  return combined.slice(0, 8)
-}
-
-// Overpass: 名前の部分一致（「宍戸」→「宍戸ヒルズカントリークラブ」）
-async function searchByOverpass(name: string): Promise<GolfCourse[]> {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const query = `
-[out:json][timeout:20];
+[out:json][timeout:25];
 (
   way["leisure"="golf_course"]["name"~"${escaped}",i];
   relation["leisure"="golf_course"]["name"~"${escaped}",i];
@@ -47,7 +21,7 @@ async function searchByOverpass(name: string): Promise<GolfCourse[]> {
 out center tags;`
 
   const res = await fetch(overpassQuery(query))
-  if (!res.ok) return []
+  if (!res.ok) throw new Error('検索に失敗しました。しばらくしてから再試行してください。')
   const data = await res.json()
 
   return (data.elements as OverpassSearchElement[])
@@ -68,56 +42,7 @@ out center tags;`
           .filter(Boolean).join(' '),
       }
     })
-}
-
-// Nominatim: type===golf_course のみ厳格フィルター
-async function searchByNominatim(name: string): Promise<GolfCourse[]> {
-  const url =
-    `${NOMINATIM_URL}/search` +
-    `?format=json` +
-    `&q=${encodeURIComponent(name)}` +
-    `&limit=8&countrycodes=jp&addressdetails=1`
-
-  const res = await fetch(url, {
-    headers: { 'Accept-Language': 'ja', 'User-Agent': 'kazeyomi-golf-weather/1.0' },
-  })
-  if (!res.ok) return []
-  const data: NominatimResult[] = await res.json()
-
-  return data
-    .filter((r) => r.type === 'golf_course')
-    .map((r) => {
-      const lat = parseFloat(r.lat)
-      const lon = parseFloat(r.lon)
-      const bb = r.boundingbox
-      return {
-        id: r.osm_id,
-        type: (r.osm_type === 'way' ? 'way' : 'relation') as 'way' | 'relation',
-        name: r.name || r.display_name.split(',')[0],
-        lat, lon,
-        bounds: {
-          minlat: parseFloat(bb[0]), maxlat: parseFloat(bb[1]),
-          minlon: parseFloat(bb[2]), maxlon: parseFloat(bb[3]),
-        },
-        address: r.address
-          ? [r.address.state, r.address.city ?? r.address.town ?? r.address.village]
-              .filter(Boolean).join(' ')
-          : '',
-      }
-    })
-}
-
-interface NominatimResult {
-  osm_id: number
-  osm_type: string
-  lat: string
-  lon: string
-  display_name: string
-  name: string
-  type: string
-  class: string
-  boundingbox: [string, string, string, string]
-  address?: { state?: string; city?: string; town?: string; village?: string }
+    .slice(0, 8)
 }
 
 interface OverpassSearchElement {
