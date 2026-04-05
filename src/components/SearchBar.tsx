@@ -15,7 +15,6 @@ export default function SearchBar({ onSelect }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  // デバウンス検索
   useEffect(() => {
     if (!query.trim()) {
       setResults([])
@@ -33,6 +32,7 @@ export default function SearchBar({ onSelect }: Props) {
         if (res.length === 0) setError('見つかりませんでした。別のキーワードで試してください。')
       } catch {
         setError('検索中にエラーが発生しました。')
+        setOpen(true)
       } finally {
         setLoading(false)
       }
@@ -40,7 +40,6 @@ export default function SearchBar({ onSelect }: Props) {
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [query])
 
-  // 外側クリックで閉じる
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)

@@ -2,57 +2,87 @@ import type { GolfCourse, GolfHole } from './types'
 import { calculateBearing } from './utils'
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org'
 
 function overpassQuery(query: string): string {
   return `${OVERPASS_URL}?data=${encodeURIComponent(query)}`
 }
 
-// ゴルフ場名で検索
+// ゴルフ場名で検索（Nominatim使用：日本語テキスト検索に強い）
 export async function searchGolfCourses(name: string): Promise<GolfCourse[]> {
   if (!name.trim()) return []
 
-  const query = `
-[out:json][timeout:20];
-(
-  way["leisure"="golf_course"]["name"~"${name}",i];
-  relation["leisure"="golf_course"]["name"~"${name}",i];
-);
-out center tags;`
+  const url =
+    `${NOMINATIM_URL}/search` +
+    `?format=json` +
+    `&q=${encodeURIComponent(name)}` +
+    `&limit=10` +
+    `&countrycodes=jp` +
+    `&addressdetails=1` +
+    `&extratags=1`
 
-  const res = await fetch(overpassQuery(query))
+  const res = await fetch(url, {
+    headers: { 'Accept-Language': 'ja', 'User-Agent': 'kazeyomi-golf-weather/1.0' },
+  })
   if (!res.ok) throw new Error('ゴルフ場の検索に失敗しました')
-  const data = await res.json()
+  const data: NominatimResult[] = await res.json()
 
-  return (data.elements as OverpassElement[])
-    .filter((el) => el.tags?.name)
-    .map((el) => {
-      const lat = el.center?.lat ?? el.lat ?? 0
-      const lon = el.center?.lon ?? el.lon ?? 0
-      const bounds = el.bounds ?? {
-        minlat: lat - 0.02,
-        minlon: lon - 0.02,
-        maxlat: lat + 0.02,
-        maxlon: lon + 0.02,
-      }
-      return {
-        id: el.id,
-        type: el.type as 'way' | 'relation',
-        name: el.tags?.name ?? '',
-        lat,
-        lon,
-        bounds,
-        address: [el.tags?.['addr:prefecture'], el.tags?.['addr:city']]
-          .filter(Boolean)
-          .join(' '),
-      }
-    })
-    .slice(0, 8)
+  const golf = data.filter(
+    (r) =>
+      r.type === 'golf_course' ||
+      r.class === 'leisure' ||
+      r.display_name.includes('ゴルフ') ||
+      r.display_name.toLowerCase().includes('golf') ||
+      r.display_name.includes('カントリー'),
+  )
+
+  const results = golf.length > 0 ? golf : data.slice(0, 5)
+
+  return results.map((r) => {
+    const lat = parseFloat(r.lat)
+    const lon = parseFloat(r.lon)
+    const bb = r.boundingbox
+    return {
+      id: r.osm_id,
+      type: (r.osm_type === 'way' ? 'way' : 'relation') as 'way' | 'relation',
+      name: r.name || r.display_name.split(',')[0],
+      lat,
+      lon,
+      bounds: {
+        minlat: parseFloat(bb[0]),
+        maxlat: parseFloat(bb[1]),
+        minlon: parseFloat(bb[2]),
+        maxlon: parseFloat(bb[3]),
+      },
+      address: r.address
+        ? [r.address.state, r.address.city ?? r.address.town ?? r.address.village]
+            .filter(Boolean)
+            .join(' ')
+        : '',
+    }
+  })
 }
 
-// コースのホール情報を取得（ティー・グリーンのノード）
+interface NominatimResult {
+  osm_id: number
+  osm_type: string
+  lat: string
+  lon: string
+  display_name: string
+  name: string
+  type: string
+  class: string
+  boundingbox: [string, string, string, string]
+  address?: {
+    state?: string
+    city?: string
+    town?: string
+    village?: string
+  }
+}
+
 export async function fetchGolfHoles(course: GolfCourse): Promise<GolfHole[]> {
   const { minlat, minlon, maxlat, maxlon } = course.bounds
-  // バッファを少し広げる
   const buf = 0.005
   const bbox = `${minlat - buf},${minlon - buf},${maxlat + buf},${maxlon + buf}`
 
@@ -93,7 +123,6 @@ out body;`
   return holes
 }
 
-// Overpass レスポンス型
 interface OverpassElement {
   id: number
   type: string
