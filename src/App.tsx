@@ -27,8 +27,6 @@ export default function App() {
     setHoles([])
     setError('')
     setTab('weather')
-
-    // 天気とホールデータを並行取得
     setLoadingWeather(true)
     setLoadingHoles(true)
 
@@ -44,126 +42,103 @@ export default function App() {
 
     fetchGolfHoles(c)
       .then(setHoles)
-      .catch(() => {/* ホールなしは許容 */})
+      .catch(() => {})
       .finally(() => setLoadingHoles(false))
   }
 
-  const loading = loadingWeather || loadingHoles
+  const holeCount = holes.filter((h) => h.direction !== undefined).length
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-gray-50">
-      {/* ヘッダー */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
-          <span className="text-3xl">⛳</span>
+    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
+      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-40">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="text-2xl">⛳</div>
           <div>
-            <h1 className="text-xl font-bold text-gray-800 leading-tight">ゴルフ天気比較</h1>
-            <p className="text-xs text-gray-500">複数の予報モデル × ホール別風向き</p>
+            <h1 className="text-lg font-bold text-gray-900 leading-tight tracking-tight">風読み</h1>
+            <p className="text-xs text-gray-400">4モデル天気比較 × ホール別風向き</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* 検索 */}
-        <div className="flex justify-center">
-          <SearchBar onSelect={handleCourseSelect} />
-        </div>
+      <main className="max-w-3xl mx-auto px-4 py-5 space-y-5">
+        <SearchBar onSelect={handleCourseSelect} />
 
-        {/* 初期状態 */}
-        {!course && (
-          <div className="text-center py-16 text-gray-400 space-y-3">
+        {!course && !loadingWeather && (
+          <div className="text-center py-16 text-gray-400 space-y-2">
             <div className="text-5xl">🏌️</div>
-            <p className="text-base">ゴルフ場名を入力して天気を確認しよう</p>
-            <p className="text-xs">4つの予報モデルを比較 + ホール別風向き分析</p>
+            <p className="font-medium">ゴルフ場を検索して<br />プレー日の天気を分析</p>
+            <p className="text-xs mt-3 text-gray-300">
+              気象庁 · ECMWF · GFS · ICONの4モデルを同時比較
+            </p>
           </div>
         )}
 
-        {/* ローディング */}
-        {loading && (
-          <div className="text-center py-10 text-gray-400">
-            <div className="text-3xl mb-3 animate-bounce">⛳</div>
-            <p className="text-sm">データ取得中...</p>
+        {loadingWeather && (
+          <div className="text-center py-12">
+            <div className="text-3xl mb-2 animate-bounce">⛳</div>
+            <p className="text-sm text-gray-500">天気データ取得中…</p>
           </div>
         )}
 
-        {/* エラー */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-            {error}
+            ⚠️ {error}
           </div>
         )}
 
-        {/* メインコンテンツ */}
         {course && !loadingWeather && forecasts.length > 0 && (
           <div className="space-y-4">
-            {/* コース情報 */}
-            <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
-              <span className="text-2xl">📍</span>
-              <div>
-                <div className="font-bold text-gray-800">{course.name}</div>
-                <div className="text-xs text-gray-500">
-                  {course.address && <span>{course.address}　</span>}
-                  <span>北緯 {course.lat.toFixed(3)}° 東経 {course.lon.toFixed(3)}°</span>
+            <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-start gap-3 shadow-sm">
+              <span className="text-xl mt-0.5">📍</span>
+              <div className="min-w-0">
+                <div className="font-bold text-gray-900 truncate">{course.name}</div>
+                <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-3">
+                  {course.address && <span>{course.address}</span>}
+                  <span>{course.lat.toFixed(3)}°N {course.lon.toFixed(3)}°E</span>
                   {!loadingHoles && (
-                    <span className="ml-2">
-                      {holes.filter(h => h.direction !== undefined).length > 0
-                        ? `　🏌️ ${holes.filter(h => h.direction !== undefined).length}ホール分析可能`
-                        : '　ホールデータなし'}
+                    <span className={holeCount > 0 ? 'text-green-600 font-medium' : ''}>
+                      {holeCount > 0 ? `🏌️ ${holeCount}H分析可` : 'ホールデータなし'}
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* 日付セレクター */}
             <DateSelector dates={dates} selected={selectedDate} onSelect={setSelectedDate} />
 
-            {/* タブ */}
-            <div className="flex border-b border-gray-200">
-              <button
-                onClick={() => setTab('weather')}
-                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  tab === 'weather'
-                    ? 'border-green-500 text-green-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                ☁️ 天気比較
-              </button>
-              <button
-                onClick={() => setTab('wind')}
-                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  tab === 'wind'
-                    ? 'border-green-500 text-green-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                💨 ホール別風向き
-                {holes.filter(h => h.direction !== undefined).length > 0 && (
-                  <span className="ml-1 bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded-full">
-                    {holes.filter(h => h.direction !== undefined).length}H
-                  </span>
-                )}
-              </button>
+            <div className="flex border-b border-gray-200 gap-1">
+              {([['weather', '☁️ 天気比較'], ['wind', '💨 ホール風向き']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    tab === key
+                      ? 'border-green-500 text-green-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                  {key === 'wind' && holeCount > 0 && (
+                    <span className="ml-1 bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded-full">
+                      {holeCount}H
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
 
-            {/* タブコンテンツ */}
-            {tab === 'weather' && (
-              <WeatherPanel forecasts={forecasts} date={selectedDate} />
-            )}
-            {tab === 'wind' && (
-              <HoleWindTable
-                holes={holes}
-                forecasts={forecasts}
-                date={selectedDate}
-              />
-            )}
+            {tab === 'weather' && <WeatherPanel forecasts={forecasts} date={selectedDate} />}
+            {tab === 'wind' && <HoleWindTable holes={holes} forecasts={forecasts} date={selectedDate} />}
           </div>
         )}
       </main>
 
-      <footer className="text-center text-xs text-gray-400 py-8 border-t border-gray-100 mt-8">
-        <p>天気データ: <a href="https://open-meteo.com/" className="underline hover:text-gray-600" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (CC BY 4.0)　　地図データ: <a href="https://www.openstreetmap.org/" className="underline hover:text-gray-600" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors (ODbL)</p>
+      <footer className="text-center text-xs text-gray-300 py-8 border-t border-gray-100 mt-8 px-4">
+        天気:{' '}
+        <a href="https://open-meteo.com/" className="underline" target="_blank" rel="noopener noreferrer">Open-Meteo</a>{' '}
+        (CC BY 4.0)　地図:{' '}
+        <a href="https://www.openstreetmap.org/" className="underline" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>{' '}
+        contributors (ODbL)
       </footer>
     </div>
   )
