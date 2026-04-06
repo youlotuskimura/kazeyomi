@@ -1,5 +1,6 @@
 import type { GolfCourse, GolfHole } from './types'
 import { calculateBearing } from './utils'
+import { searchStatic } from './golfCourses'
 
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -94,6 +95,19 @@ interface GeoResult {
 export async function searchGolfCourses(name: string): Promise<GolfCourse[]> {
   if (!name.trim()) return []
 
+  const staticResults = searchStatic(name).map((c, i) => ({
+    id: -(1000 + i),
+    type: 'way' as const,
+    name: c.name,
+    lat: c.lat,
+    lon: c.lon,
+    bounds: {
+      minlat: c.lat - 0.02, minlon: c.lon - 0.02,
+      maxlat: c.lat + 0.02, maxlon: c.lon + 0.02,
+    },
+    address: [c.prefecture, c.city].filter(Boolean).join(' '),
+  }))
+
   const [osmResult, geoResult] = await Promise.allSettled([
     searchByOSM(name),
     searchByGeocode(name),
@@ -103,6 +117,7 @@ export async function searchGolfCourses(name: string): Promise<GolfCourse[]> {
   const geoCourses = geoResult.status === 'fulfilled' ? geoResult.value : []
 
   if (osmCourses.length > 0) return osmCourses
+  if (staticResults.length > 0) return staticResults
   return geoCourses
 }
 
