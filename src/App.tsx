@@ -1,145 +1,167 @@
 import { useState } from 'react'
-import type { GolfCourse, GolfHole, ModelForecast } from './types'
-import { fetchAllForecasts } from './weatherApi'
-import { fetchGolfHoles } from './osmApi'
-import { groupByDay } from './utils'
-import SearchBar from './components/SearchBar'
-import DateSelector from './components/DateSelector'
-import WeatherPanel from './components/WeatherPanel'
-import HoleWindTable from './components/HoleWindTable'
+import { Role } from './hills/data'
+import Header from './hills/Header'
+import Footer from './hills/Footer'
+import PublicHome from './hills/PublicHome'
+import WorkerHome from './hills/WorkerHome'
+import AdminHome from './hills/AdminHome'
+import ContactModal from './hills/ContactModal'
+import { ArchivePage, MatchingPage, HealthPage, SimplePage } from './hills/FeaturePages'
+import { Button } from './hills/ui'
 
-type Tab = 'weather' | 'wind'
-
+// HILLS ONE — 森ビル オフィス事業向け統合プラットフォーム モックアップ
+// 認証状態（loggedIn）とロール（worker/admin）で画面を出し分ける。
 export default function App() {
-  const [course, setCourse] = useState<GolfCourse | null>(null)
-  const [holes, setHoles] = useState<GolfHole[]>([])
-  const [forecasts, setForecasts] = useState<ModelForecast[]>([])
-  const [dates, setDates] = useState<string[]>([])
-  const [selectedDate, setSelectedDate] = useState('')
-  const [tab, setTab] = useState<Tab>('weather')
-  const [loadingWeather, setLoadingWeather] = useState(false)
-  const [loadingHoles, setLoadingHoles] = useState(false)
-  const [error, setError] = useState('')
+  const [loggedIn, setLoggedIn] = useState(false)
+  const [role, setRole] = useState<Role>('worker')
+  const [page, setPage] = useState('home')
+  const [contactOpen, setContactOpen] = useState(false)
 
-  async function handleCourseSelect(c: GolfCourse) {
-    setCourse(c)
-    setForecasts([])
-    setHoles([])
-    setError('')
-    setTab('weather')
-    setLoadingWeather(true)
-    setLoadingHoles(true)
+  const go = (key: string) => {
+    setPage(key)
+    window.scrollTo({ top: 0 })
+  }
+  const openContact = () => setContactOpen(true)
 
-    fetchAllForecasts(c.lat, c.lon)
-      .then((data) => {
-        setForecasts(data)
-        const allDays = Object.keys(groupByDay(data[0].hourly)).sort()
-        setDates(allDays)
-        setSelectedDate(allDays[0] ?? '')
-      })
-      .catch(() => setError('天気データの取得に失敗しました。'))
-      .finally(() => setLoadingWeather(false))
-
-    fetchGolfHoles(c)
-      .then(setHoles)
-      .catch(() => {})
-      .finally(() => setLoadingHoles(false))
+  function renderPage() {
+    // ホーム：認証状態とロールで出し分け
+    if (page === 'home') {
+      if (!loggedIn) return <PublicHome onContact={openContact} onNav={go} />
+      return role === 'admin' ? (
+        <AdminHome onContact={openContact} onNav={go} />
+      ) : (
+        <WorkerHome onNav={go} />
+      )
+    }
+    if (page === 'archive') return <ArchivePage onContact={openContact} loggedIn={loggedIn} />
+    if (page === 'matching') return <MatchingPage onContact={openContact} />
+    if (page === 'health') return <HealthPage />
+    if (page === 'city')
+      return (
+        <SimplePage
+          title="街を使う（回遊）"
+          desc="商業・飲食のモバイルオーダー、美術館・展望台のワーカー特典、館内ナビ・会議室予約をHILLS IDで。"
+          items={[
+            { icon: '🍽️', t: 'モバイルオーダー・優待', d: '館内飲食を事前注文・テナント割引。' },
+            { icon: '🖼️', t: '美術館・展望台 特典', d: '社員価格のチケットと限定鑑賞会。' },
+            { icon: '🧭', t: '館内ナビ・会議室予約', d: '混雑状況とラウンジ・会議室の空き予約。' },
+            { icon: '🏛️', t: '会員制クラブ', d: '会員ランクに応じたクラブ・ラウンジ利用。' },
+            { icon: '🚶', t: '回遊パスポート', d: '街の利用履歴を蓄積しレコメンド。' },
+            { icon: '💳', t: 'HILLS ID ウォレット', d: 'ポイント・特典・電子社員証を一元管理。' },
+          ]}
+        />
+      )
+    if (page === 'community')
+      return (
+        <SimplePage
+          title="コミュニティ（ワーカーSNS）"
+          desc="興味タグ・部活・テーマ別グループ、1on1ランチマッチング、スキルシェアでワーカー同士をつなぐ。"
+          items={[
+            { icon: '🏃', t: '部活・興味グループ', d: 'ランニング、読書、勉強会など。' },
+            { icon: '🍱', t: 'ランチマッチング', d: '別テナントの人と共通の興味でマッチ。' },
+            { icon: '💡', t: 'スキルシェア', d: '社外の知見を気軽に交換。' },
+            { icon: '📣', t: 'タイムライン・掲示板', d: 'グループの新着・告知をフィード表示。' },
+          ]}
+        />
+      )
+    if (page === 'search')
+      return (
+        <SimplePage
+          title="オフィスを探す"
+          desc="拠点・面積・賃料レンジで検討。事例とともに、内見・オンライン相談へ。"
+          items={[
+            { icon: '🏙️', t: '拠点一覧', d: '虎ノ門 / 麻布台 / 六本木 ほか。' },
+            { icon: '📐', t: '区画・面積検索', d: '坪数・賃料レンジで絞り込み。' },
+            { icon: '📈', t: '導入事例', d: '入居企業の成果を定量で。' },
+          ]}
+        />
+      )
+    if (page === 'features')
+      return (
+        <SimplePage
+          title="プラットフォームでできること"
+          desc="ワーカー・総務人事・経営層、それぞれの価値を統合IDで提供します。"
+          items={[
+            { icon: '👤', t: 'ワーカー向け', d: '文化・健康・回遊・コミュニティ。' },
+            { icon: '🧑‍💼', t: '総務・人事向け', d: '管理・福利厚生・健康経営の可視化。' },
+            { icon: '🏢', t: '経営層向け', d: 'ビジネスマッチング・ブランド・採用力。' },
+          ]}
+        />
+      )
+    if (page === 'culture')
+      return (
+        <SimplePage
+          title="ヒルズの街・カルチャー"
+          desc="美術館・展望台・会員制クラブなど、森ビルだけの文化資産。"
+          items={[
+            { icon: '🎨', t: '美術館', d: 'アートとビジネスが交差する日常。' },
+            { icon: '🌃', t: '展望台 / TOKYO NODE', d: '眺望と体験型コンテンツ。' },
+            { icon: '🥂', t: '会員制クラブ', d: 'ビジネスと交流の特別な場。' },
+          ]}
+        />
+      )
+    return null
   }
 
-  const holeCount = holes.filter((h) => h.direction !== undefined).length
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-40">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="text-2xl">⛳</div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900 leading-tight tracking-tight">風読み</h1>
-            <p className="text-xs text-gray-400">4モデル天気比較 × ホール別風向き</p>
+    <div className="min-h-screen font-sans text-ink-900">
+      <Header
+        loggedIn={loggedIn}
+        role={role}
+        onLogin={() => {
+          setLoggedIn(true)
+          go('home')
+        }}
+        onLogout={() => {
+          setLoggedIn(false)
+          go('home')
+        }}
+        onRoleChange={(r) => {
+          setRole(r)
+          go('home')
+        }}
+        onContact={openContact}
+        onNav={go}
+      />
+
+      {renderPage()}
+
+      <Footer loggedIn={loggedIn} />
+
+      <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
+
+      {/* モバイル固定CTA（未ログイン時のみ＝常時CV露出） */}
+      {!loggedIn && (
+        <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
+          <div className="flex-1">
+            <Button variant="outline" full onClick={openContact}>資料DL</Button>
+          </div>
+          <div className="flex-1">
+            <Button variant="gold" full onClick={openContact}>相談する</Button>
           </div>
         </div>
-      </header>
+      )}
 
-      <main className="max-w-3xl mx-auto px-4 py-5 space-y-5">
-        <SearchBar onSelect={handleCourseSelect} />
+      {/* デモ操作ヒント（提案レビュー用） */}
+      <DemoHint loggedIn={loggedIn} />
+    </div>
+  )
+}
 
-        {!course && !loadingWeather && (
-          <div className="text-center py-16 text-gray-400 space-y-2">
-            <div className="text-5xl">🏌️</div>
-            <p className="font-medium">ゴルフ場を検索して<br />プレー日の天気を分析</p>
-            <p className="text-xs mt-3 text-gray-300">
-              気象庁 · ECMWF · GFS · ICONの4モデルを同時比較
-            </p>
-          </div>
-        )}
-
-        {loadingWeather && (
-          <div className="text-center py-12">
-            <div className="text-3xl mb-2 animate-bounce">⛳</div>
-            <p className="text-sm text-gray-500">天気データ取得中…</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-            ⚠️ {error}
-          </div>
-        )}
-
-        {course && !loadingWeather && forecasts.length > 0 && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-start gap-3 shadow-sm">
-              <span className="text-xl mt-0.5">📍</span>
-              <div className="min-w-0">
-                <div className="font-bold text-gray-900 truncate">{course.name}</div>
-                <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-3">
-                  {course.address && <span>{course.address}</span>}
-                  <span>{course.lat.toFixed(3)}°N {course.lon.toFixed(3)}°E</span>
-                  {!loadingHoles && (
-                    <span className={holeCount > 0 ? 'text-green-600 font-medium' : ''}>
-                      {holeCount > 0 ? `🏌️ ${holeCount}H分析可` : 'ホールデータなし'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <DateSelector dates={dates} selected={selectedDate} onSelect={setSelectedDate} />
-
-            <div className="flex border-b border-gray-200 gap-1">
-              {([['weather', '☁️ 天気比較'], ['wind', '💨 ホール風向き']] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setTab(key)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                    tab === key
-                      ? 'border-green-500 text-green-700'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {label}
-                  {key === 'wind' && holeCount > 0 && (
-                    <span className="ml-1 bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded-full">
-                      {holeCount}H
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {tab === 'weather' && <WeatherPanel forecasts={forecasts} date={selectedDate} />}
-            {tab === 'wind' && <HoleWindTable holes={holes} forecasts={forecasts} date={selectedDate} />}
-          </div>
-        )}
-      </main>
-
-      <footer className="text-center text-xs text-gray-300 py-8 border-t border-gray-100 mt-8 px-4">
-        天気:{' '}
-        <a href="https://open-meteo.com/" className="underline" target="_blank" rel="noopener noreferrer">Open-Meteo</a>{' '}
-        (CC BY 4.0)　地図:{' '}
-        <a href="https://www.openstreetmap.org/" className="underline" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>{' '}
-        contributors (ODbL)
-      </footer>
+function DemoHint({ loggedIn }: { loggedIn: boolean }) {
+  const [show, setShow] = useState(true)
+  if (!show) return null
+  return (
+    <div className="fixed bottom-20 right-4 z-30 max-w-xs rounded-xl bg-ink-900 p-4 text-xs text-slate-200 shadow-xl sm:bottom-4">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-bold text-gold-400">モックアップ操作ガイド</p>
+        <button onClick={() => setShow(false)} className="text-slate-400 hover:text-white">×</button>
+      </div>
+      <p className="mt-2 leading-relaxed">
+        {loggedIn
+          ? 'ヘッダー右の「ワーカー / 企業管理者」で出し分けを切替。ログアウトで新規検討層TOPに戻ります。'
+          : '右上「ログイン」で既存テナント向けTOPに切替。ログイン後、ロール切替が可能です。'}
+      </p>
     </div>
   )
 }
